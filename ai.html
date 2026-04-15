@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Snake Game</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: royalblue;
+  color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.game-container {
+  text-align: center;
+  position: relative;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(10, 50px);
+  grid-template-rows: repeat(10, 50px);
+  gap: 4px;
+}
+
+.cell {
+  width: 50px;
+  height: 50px;
+  background: white;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+}
+
+.scoreboard {
+  margin-top: 15px;
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  font-size: 18px;
+}
+
+.start-message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.6);
+  padding: 15px 25px;
+  border-radius: 10px;
+  font-size: 18px;
+}
+
+.popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.85);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.popup button {
+  padding: 10px 20px;
+  font-size: 16px;
+  margin-top: 10px;
+  cursor: pointer;
+}
+
+canvas {
+  position: fixed;
+  pointer-events: none;
+  top: 0;
+  left: 0;
+}
+</style>
+</head>
+
+<body>
+<nav style="position: fixed; top: 15px; left: 15px; z-index: 999;">
+  <a href="index.html" style="color: white; margin-right: 15px; text-decoration: none; font-family: Arial, sans-serif;">Resume Page</a>
+  <a href="fromScratch.html" style="color: white; text-decoration: none; font-family: Arial, sans-serif;">America Page</a>
+</nav>
+<div class="game-container">
+  <div id="grid" class="grid"></div>
+
+  <div id="startMessage" class="start-message">
+    Press any key to start
+  </div>
+
+  <div class="scoreboard">
+    <div>Score: <span id="score">0</span></div>
+    <div>High Score: <span id="highScore">0</span></div>
+  </div>
+</div>
+
+<div class="popup" id="popup">
+  <h1>Oops!</h1>
+  <button onclick="restart()">Try Again</button>
+</div>
+
+<canvas id="confetti"></canvas>
+
+<script>
+const size = 10;
+const grid = document.getElementById("grid");
+const scoreEl = document.getElementById("score");
+const highScoreEl = document.getElementById("highScore");
+const popup = document.getElementById("popup");
+const startMessage = document.getElementById("startMessage");
+
+let snake, direction, nextDirection, food, score;
+let highScore = 0;
+let gameInterval;
+let gameStarted = false;
+let speed = 180;
+
+// CREATE GRID
+let cells = [];
+for (let i = 0; i < size * size; i++) {
+  const div = document.createElement("div");
+  div.classList.add("cell");
+  grid.appendChild(div);
+  cells.push(div);
+}
+
+function index(x, y) {
+  return y * size + x;
+}
+
+// 🔵 BLUE SHADES ONLY
+function randomBlue() {
+  const lightness = Math.floor(Math.random() * 30) + 40; // 40–70%
+  return `hsl(220, 100%, ${lightness}%)`;
+}
+
+function randomFood() {
+  let pos;
+  do {
+    pos = {
+      x: Math.floor(Math.random() * size),
+      y: Math.floor(Math.random() * size),
+      color: randomBlue()
+    };
+  } while (snake.some(s => s.x === pos.x && s.y === pos.y));
+  return pos;
+}
+
+function draw() {
+  cells.forEach(c => {
+    c.style.backgroundColor = "white";
+    c.style.boxShadow = "none";
+    c.style.borderRadius = "10px";
+  });
+
+  snake.forEach((s, i) => {
+    const cell = cells[index(s.x, s.y)];
+
+    if (i === 0) {
+      cell.style.backgroundColor = "darkblue";
+      cell.style.boxShadow = "0 0 12px rgba(0,0,139,0.9)";
+    } else {
+      cell.style.backgroundColor = "royalblue";
+      cell.style.boxShadow = "0 0 8px rgba(65,105,225,0.7)";
+    }
+
+    cell.style.borderRadius = "12px";
+  });
+
+  const foodCell = cells[index(food.x, food.y)];
+  foodCell.style.backgroundColor = food.color;
+  foodCell.style.borderRadius = "50%";
+  foodCell.style.boxShadow = `0 0 12px ${food.color}`;
+}
+
+function update() {
+  if (!gameStarted) return;
+
+  // ✅ APPLY BUFFERED DIRECTION (prevents double-tap crash)
+  direction = nextDirection;
+
+  const head = {...snake[0]};
+  head.x += direction.x;
+  head.y += direction.y;
+
+  if (head.x < 0 || head.x >= size || head.y < 0 || head.y >= size) {
+    return gameOver();
+  }
+
+  if (snake.some(s => s.x === head.x && s.y === head.y)) {
+    return gameOver();
+  }
+
+  snake.unshift(head);
+
+  if (head.x === food.x && head.y === food.y) {
+    score++;
+    scoreEl.textContent = score;
+
+    speed = Math.max(70, speed - 4);
+    clearInterval(gameInterval);
+    gameInterval = setInterval(update, speed);
+
+    if (score > highScore) {
+      highScore = score;
+      highScoreEl.textContent = highScore;
+      launchConfetti();
+    }
+
+    food = randomFood();
+  } else {
+    snake.pop();
+  }
+
+  draw();
+}
+
+function gameOver() {
+  clearInterval(gameInterval);
+  popup.style.display = "flex";
+  startMessage.style.display = "block";
+}
+
+function start() {
+  snake = [{x: 5, y: 5}];
+  direction = {x: 1, y: 0};
+  nextDirection = {x: 1, y: 0};
+  food = randomFood();
+  score = 0;
+  speed = 180;
+  scoreEl.textContent = 0;
+  gameStarted = false;
+  popup.style.display = "none";
+  startMessage.style.display = "block";
+
+  gameInterval = setInterval(update, speed);
+  draw();
+}
+
+function restart() {
+  start();
+}
+
+// ✅ INPUT HANDLING (SAFE)
+document.addEventListener("keydown", e => {
+  if (!gameStarted) {
+    gameStarted = true;
+    startMessage.style.display = "none";
+  }
+
+  let newDir = null;
+
+  if (e.key === "ArrowUp") newDir = {x:0,y:-1};
+  if (e.key === "ArrowDown") newDir = {x:0,y:1};
+  if (e.key === "ArrowLeft") newDir = {x:-1,y:0};
+  if (e.key === "ArrowRight") newDir = {x:1,y:0};
+
+  if (!newDir) return;
+
+  // ❌ Prevent reversing into yourself
+  if (
+    newDir.x === -direction.x &&
+    newDir.y === -direction.y
+  ) return;
+
+  nextDirection = newDir;
+});
+
+// CONFETTI (unchanged)
+const canvas = document.getElementById("confetti");
+const ctx = canvas.getContext("2d");
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+let confetti = [];
+let confettiActive = false;
+
+function launchConfetti() {
+  confetti = [];
+  confettiActive = true;
+
+  for (let i = 0; i < 50; i++) {
+    confetti.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height / 2,
+      size: Math.random() * 5 + 2,
+      speed: Math.random() * 3 + 2
+    });
+  }
+
+  setTimeout(() => {
+    confettiActive = false;
+    confetti = [];
+  }, 1000);
+}
+
+function updateConfetti() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if (confettiActive) {
+    confetti.forEach(c => {
+      ctx.fillStyle = `hsl(${Math.random()*360},100%,50%)`;
+      ctx.fillRect(c.x, c.y, c.size, c.size);
+      c.y += c.speed;
+    });
+  }
+
+  requestAnimationFrame(updateConfetti);
+}
+
+updateConfetti();
+start();
+</script>
+
+</body>
+</html>
